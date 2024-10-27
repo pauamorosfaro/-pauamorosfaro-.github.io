@@ -1,0 +1,169 @@
+import random
+import matplotlib.pyplot as plt
+
+DEMANAR_UNA_CARTA_MÉS = 1
+QUEDAR_IGUAL = 0
+
+
+class BlackJack:
+   cartes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10]
+
+   def __init__(self, jugador_sum, crupier_visible, as_11):
+       self.jugador_sum = jugador_sum
+       self.crupier_visible = crupier_visible
+       self.as_11 = as_11
+
+   def treu_Carta(self):
+       return random.choice(self.cartes)
+
+   def crupier_torn(self):
+       crupier_sum = self.crupier_visible
+       if crupier_sum == 1:
+           crupier_as = True
+           crupier_sum = 11
+       else:
+           crupier_sum = False
+
+       while crupier_sum < 17:
+           nova_carta = self.treu_Carta()
+           crupier_sum = crupier_sum + nova_carta
+           if crupier_sum > 21 and crupier_sum == True:
+               crupier_sum = crupier_sum - 10
+               crupier_sum = False
+           elif nova_carta == 1 and crupier_sum + 10 < 22:
+               crupier_sum = crupier_sum + 10
+               crupier_sum = True
+
+       if crupier_sum > 21:
+           return [self.jugador_sum, self.crupier_visible, self.as_11, 1, True]
+       if crupier_sum > self.jugador_sum:
+           return [self.jugador_sum, self.crupier_visible, self.as_11, -1, True]
+       if self.jugador_sum > crupier_sum :
+           return [self.jugador_sum, self.crupier_visible, self.as_11, 1, True]
+       if self.jugador_sum == crupier_sum :
+           return [self.jugador_sum, self.crupier_visible, self.as_11, 0, True]
+
+   def torn(self, acció):
+       if acció == QUEDAR_IGUAL:
+           return self.crupier_torn()
+       else:
+           nova_carta = self.treu_Carta()
+           self.jugador_sum = self.jugador_sum + nova_carta
+
+           if self.jugador_sum > 21 and self.as_11 == True:
+               self.jugador_sum = self.jugador_sum - 10
+               self.as_11 = False
+
+           elif nova_carta == 1 and self.jugador_sum + 10 < 22:
+               self.jugador_sum = self.jugador_sum + 10
+               self.as_11 = True
+
+           if self.jugador_sum > 21:
+               return [self.jugador_sum, self.crupier_visible, self.as_11, -1, True]
+           else:
+               return [self.jugador_sum, self.crupier_visible, self.as_11, 0, False]
+
+
+class Estat:
+
+   def __init__(self, jugador_sum, crupier_visible, as_11):
+       self.jugador_sum = jugador_sum
+       self.crupier_visible = crupier_visible
+       self.as_11 = as_11
+       self.n_DEMANAR_UNA_CARTA_MÉS = 1
+       self.n_QUEDAR_IGUAL = 1
+       self.Q_DEMANAR_UNA_CARTA_MÉS_total = 0
+       self.Q_QUEDAR_IGUAL_total = 0
+       self.policy = QUEDAR_IGUAL
+
+   def actualitza(self, recompensa, acció):
+       if acció == QUEDAR_IGUAL:
+           self.n_QUEDAR_IGUAL = self.n_QUEDAR_IGUAL + 1
+           self.Q_QUEDAR_IGUAL_total = self.Q_QUEDAR_IGUAL_total + recompensa
+       else:
+           self.n_DEMANAR_UNA_CARTA_MÉS = self.n_DEMANAR_UNA_CARTA_MÉS + 1
+           self.Q_DEMANAR_UNA_CARTA_MÉS_total = self.Q_DEMANAR_UNA_CARTA_MÉS_total + recompensa
+
+       if self.Q_DEMANAR_UNA_CARTA_MÉS_total / float(self.n_DEMANAR_UNA_CARTA_MÉS) > self.Q_QUEDAR_IGUAL_total / float(self.n_stick):
+           self.policy = DEMANAR_UNA_CARTA_MÉS
+       else:
+           self.policy = QUEDAR_IGUAL
+
+
+def getEstatIdx(jugador_sum, crupier_visible, as_11):
+   return ((jugador_sum - 11) * 10 + crupier_visible) * 2 - as_11- 1
+
+
+def monteCarloES(nombre_episodis=7500000):
+   states = [Estat(i, j, l) for i in range(11, 22) for j in range(1, 11) for l in reversed(range(2))]
+   for i in range(0, nombre_episodis):
+       s = random.choice(states)
+       episodi = []
+       bj = BlackJack(s.jugador_sum, s.crupier_visible, s.as_11)
+       acció= random.randint(0, 1)
+       episodi.append([s, acció])
+       while True:
+           jugador_sum, crupier_visible, as_11, recompensa, joc_acaba = bj.torn(acció)
+           if joc_acaba == False:
+               s = states[getEstatIdx(jugador_sum, crupier_visible, as_11)]
+               acció= s.policy
+               episodi.append([s, acció])
+           else:
+               for e in episodi:
+                   e[0].actualitza(recompensa, e[1])
+               break
+   return states
+
+
+def determina_estratègia(states):
+   nodemanar_amb_as = dict()
+   demanar_amb_as = dict()
+   for s in states:
+       if s.policy == DEMANAR_UNA_CARTA_MÉS and s.as_11 == False:
+           if s.crupier_visible in nodemanar_amb_as:
+               nodemanar_amb_as[s.crupier_visible] = max(nodemanar_amb_as[s.crupier_visible], s.jugador_sum)
+           else:
+               nodemanar_amb_as[s.crupier_visible] = s.jugador_sum
+       elif s.policy == DEMANAR_UNA_CARTA_MÉS and s.as_11 == True:
+           if s.crupier_visible in demanar_amb_as:
+               demanar_amb_as[s.crupier_visible] = max(demanar_amb_as[s.crupier_visible], s.jugador_sum)
+           else:
+               demanar_amb_as[s.crupier_visible] = s.jugador_sum
+
+   xrange = range
+
+   lists = sorted(nodemanar_amb_as.items())
+   x, y = zip(*lists)
+
+   plt.figure(figsize=(12, 6))
+   plt.subplot(1, 2, 1)
+   plt.torn(x, y, where='mid')
+   axes = plt.gca()
+   axes.set_ylim([10, 22])
+   axes.yaxis.set_ticks(xrange(10, 23, 1))
+   axes.xaxis.set_ticks(xrange(1, 10, 1))
+   plt.xlabel("Carta visible crupier")
+   plt.ylabel("Conjunt jugador")
+   plt.title("L'as té valor 1", fontsize=14)
+   plt.text(0.5, 0.8, "Quedar-se igual", fontsize=10, horizontalalignment="center", transform=axes.transAxes)
+   plt.text(0.8, 0.2, "Demanar una carta més", fontsize=10, horizontalalignment="center", transform=axes.transAxes)
+
+   lists = sorted(hit_ace.items())
+   x, y = zip(*lists)
+   plt.subplot(1, 2, 2)
+   plt.torn(x, y, where='mid')
+   axes = plt.gca()
+   axes.set_ylim([10, 22])
+   axes.yaxis.set_ticks(xrange(10, 23, 1))
+   axes.xaxis.set_ticks(xrange(1, 10, 1))
+   plt.xlabel("Carta visible crupier")
+   plt.ylabel("Conjunt jugador")
+   plt.title("L'as té valor 1", fontsize=14)
+   plt.text(0.5, 0.8, "Quedar-se igual", fontsize=10, horizontalalignment="center", transform=axes.transAxes)
+   pl.text(0.5, 0.2, "Demanar una carta més", fontsize=10, horizontalalignment="center", transform=axes.transAxes)
+   plt.show()
+
+
+if __name__ == "__main__":
+   states = monteCarloES()
+   determina_estratègia(states)
